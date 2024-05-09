@@ -545,6 +545,10 @@ impl Factory {
                     Some(node)
                 }
                 Event::End(_e) => None,
+                Event::Comment(content) => {
+                    debug!("Comment - \"{content:?}\"");
+                    None
+                },
                 e => {
                     debug!("Other - SHOULDN'T BE HERE");
                     debug!("{e:?}");

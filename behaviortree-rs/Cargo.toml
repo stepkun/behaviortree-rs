@@ -1,17 +1,18 @@
 [package]
 name = "behaviortree-rs"
 description = "Rust implementation of BehaviorTree.CPP, a robust behavior tree library in C++"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 authors = ["Nicholas Crothers <ncrothers523@gmail.com>"]
 license = "MIT"
+repository = "https://github.com/ncrothers/behaviortree-rs"
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.75"
-behaviortree-rs-derive = "0.2.2"
+behaviortree-rs-derive = "0.2.4"
 futures = { version = "0.3.28" }
 log = "0.4.20"
 pretty_env_logger = "0.5.0"

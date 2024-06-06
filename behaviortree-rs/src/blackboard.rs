@@ -100,6 +100,11 @@ pub struct BlackboardData {
 /// Supertrait for `Any + BTToString`
 pub trait AnyStringy: Any + BTToString + Send {}
 
+impl<T> AnyStringy for T
+where
+    T: Any + BTToString + Send
+{}
+
 impl std::fmt::Debug for (dyn AnyStringy) {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "AnyStringy {{ .. }}")

@@ -3,8 +3,19 @@ use behaviortree_rs::{
     macros::{define_ports, input_port},
     nodes::NodeResult,
 };
-use behaviortree_rs_derive::bt_node;
+use behaviortree_rs_derive::{bt_node, BTToString, FromString};
 use log::info;
+
+#[derive(BTToString)]
+struct Test {
+    
+}
+
+impl ToString for Test {
+    fn to_string(&self) -> String {
+        todo!()
+    }
+}
 
 pub fn test_setup() {
     let _ = pretty_env_logger::formatted_builder()

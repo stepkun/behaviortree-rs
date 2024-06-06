@@ -737,6 +737,23 @@ pub fn derive_from_string(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
+#[proc_macro_derive(BTToString)]
+pub fn derive_bt_to_string(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    let ident = input.ident;
+
+    let expanded = quote! {
+        impl ::behaviortree_rs::basic_types::BTToString for #ident {
+            fn bt_to_string(&self) -> String {
+                ::std::string::ToString::to_string(self)
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
 struct NodeRegistration {
     factory: syn::Ident,
     name: proc_macro2::TokenStream,

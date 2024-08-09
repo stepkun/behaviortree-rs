@@ -1,8 +1,10 @@
 use std::{
     any::Any,
     collections::HashMap,
-    sync::{Arc, Mutex, RwLock},
+    sync::Arc,
 };
+
+use parking_lot::{Mutex, RwLock};
 
 use crate::basic_types::{BTToString, FromString, ParseStr};
 
@@ -172,7 +174,7 @@ impl Blackboard {
     /// the parent Blackboard. Only uses autoremapping if there's no matching
     /// explicit remapping rule.
     pub fn enable_auto_remapping(&mut self, use_remapping: bool) {
-        self.data.write().unwrap().auto_remapping = use_remapping;
+        self.data.write().auto_remapping = use_remapping;
     }
 
     /// Adds remapping rule for Blackboard. Maps from `internal` (this Blackboard)
@@ -180,14 +182,13 @@ impl Blackboard {
     pub fn add_subtree_remapping(&mut self, internal: String, external: String) {
         self.data
             .write()
-            .unwrap()
             .internal_to_external
             .insert(internal, external);
     }
 
     /// Get an Rc to the Entry
     fn get_entry<'a>(&'a mut self, key: &'a str) -> Option<EntryPtr> {
-        let mut blackboard = self.data.write().unwrap();
+        let mut blackboard = self.data.write();
 
         // Try to get the key
         if let Some(entry) = blackboard.storage.get(key) {
@@ -227,7 +228,7 @@ impl Blackboard {
         self
             .get_entry(key)
             .and_then(|entry| {
-                let entry = entry.lock().unwrap();
+                let entry = entry.lock();
                 
                 match &*entry {
                     Entry::Generic(entry) => {
@@ -253,7 +254,7 @@ impl Blackboard {
         self
             .get_entry(key)
             .and_then(|entry| {
-                let entry = entry.lock().unwrap();
+                let entry = entry.lock();
     
                 match &*entry {
                     Entry::Stringy(entry) => {
@@ -273,7 +274,7 @@ impl Blackboard {
         self
             .get_entry(key)
             .and_then(|entry| {
-                let entry_lock = entry.lock().unwrap();
+                let entry_lock = entry.lock();
                 // If value is a String or &str, try to call `FromString` to convert to T
                 match &(*entry_lock) {
                     Entry::Generic(entry) => {
@@ -308,7 +309,7 @@ impl Blackboard {
                 // Because this is the non-`stringy` function, we have to update it as a
                 // `Generic`
 
-                let mut t = entry.lock().unwrap();
+                let mut t = entry.lock();
                 *t = Entry::Generic(Box::new(value.clone()));
                 return Some(value);
             }
@@ -331,7 +332,7 @@ impl Blackboard {
             // Try to parse String into T
             if let Ok(value) = <String as ParseStr<T>>::parse_str(&value) {
                 // Update value with the value type instead of just a string
-                let mut t = entry.lock().unwrap();
+                let mut t = entry.lock();
                 *t = Entry::Stringy(Box::new(value.clone()));
                 return Some(value);
             }
@@ -424,7 +425,7 @@ impl Blackboard {
         self
             .get_entry(key.as_ref())
             .and_then(|entry| {
-                let entry = entry.lock().unwrap();
+                let entry = entry.lock();
 
                 match &*entry {
                     Entry::Stringy(entry) => {
@@ -484,10 +485,10 @@ impl Blackboard {
     pub fn set<T: Any + Send + 'static>(&mut self, key: impl AsRef<str>, value: T) {
         let key = key.as_ref().to_string();
 
-        let blackboard = self.data.write().unwrap();
+        let blackboard = self.data.write();
 
         if let Some(entry) = blackboard.storage.get(&key) {
-            let mut entry = entry.lock().unwrap();
+            let mut entry = entry.lock();
 
             // Overwrite value of existing entry
             *entry = Entry::Generic(Box::new(value));
@@ -495,7 +496,7 @@ impl Blackboard {
             drop(blackboard);
             let entry = self.create_entry(&key);
 
-            let mut entry = entry.lock().unwrap();
+            let mut entry = entry.lock();
 
             // Set value of new entry
             *entry = Entry::Generic(Box::new(value));
@@ -511,17 +512,17 @@ impl Blackboard {
     pub fn set_stringy<T: AnyStringy + Send + 'static>(&mut self, key: impl AsRef<str>, value: T) {
         let key = key.as_ref().to_string();
 
-        let blackboard = self.data.write().unwrap();
+        let blackboard = self.data.write();
 
         if let Some(entry) = blackboard.storage.get(&key) {
-            let mut entry = entry.lock().unwrap();
+            let mut entry = entry.lock();
 
             // Overwrite value of existing entry
             *entry = Entry::Stringy(Box::new(value));
         } else {
             drop(blackboard);
             let entry = self.create_entry(&key);
-            let mut entry = entry.lock().unwrap();
+            let mut entry = entry.lock();
 
             // Set value of new entry
             *entry = Entry::Stringy(Box::new(value));
@@ -531,7 +532,7 @@ impl Blackboard {
     fn create_entry<'a>(&'a mut self, key: &'a (impl AsRef<str> + Sync)) -> EntryPtr {
         let entry;
 
-        let mut blackboard = self.data.write().unwrap();
+        let mut blackboard = self.data.write();
 
         // If the entry already exists
         if let Some(existing_entry) = blackboard.storage.get(key.as_ref()) {

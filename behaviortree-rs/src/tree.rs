@@ -60,6 +60,11 @@ enum TickOption {
     OnceUnlessWokenUp,
 }
 
+pub struct NodeIter<'a> {
+    nodes: Vec<&'a TreeNode>,
+    idxs: Vec<i32>,
+}
+
 #[derive(Debug)]
 pub struct AsyncTree {
     root: TreeNode,
@@ -107,6 +112,59 @@ impl AsyncTree {
     pub async fn halt_tree(&mut self) {
         self.root.halt().await;
     }
+
+    pub fn visit_nodes(&self) -> impl Iterator<Item = &TreeNode> {
+        NodeIter::new(&self.root)
+    }
+}
+
+impl<'a> NodeIter<'a> {
+    pub fn new(root: &'a TreeNode) -> Self {
+        Self {
+            nodes: vec![root],
+            idxs: vec![-1],
+        }
+    }
+}
+
+impl<'a> Iterator for NodeIter<'a> {
+    type Item = &'a TreeNode;
+
+    fn next(&mut self) -> Option<Self::Item> {        
+        // Loop until we find a node to return
+        loop {
+            // Out of nodes; we have traversed the entire tree
+            if self.nodes.is_empty() {
+                return None;
+            }
+
+            let end_idx = self.nodes.len() - 1;
+    
+            let node = self.nodes[end_idx];
+            let child_idx = &mut self.idxs[end_idx];
+    
+            // When this index is -1, that means we haven't returned the node yet
+            if *child_idx < 0 {
+                self.idxs[end_idx] = 0;
+                return Some(node);
+            } else if node.children().is_none() || *child_idx >= node.children().unwrap().len() as i32 {
+                // When the node has no children, pop it off and try the next element
+                // OR
+                // If we've already returned all children, pop it off
+                // Unwrap is safe because we just checked if it's None
+                self.nodes.pop();
+                self.idxs.pop();
+            } else {
+                // If nothing else applies, we can push the node's child and return it
+                // Unwrap is safe because we just checked if it's None
+                let child = &node.children().unwrap()[*child_idx as usize];
+                *child_idx += 1;
+
+                self.nodes.push(child);
+                self.idxs.push(-1);
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -139,6 +197,10 @@ impl SyncTree {
 
     pub async fn halt_tree(&mut self) {
         futures::executor::block_on(self.root.halt_tree());
+    }
+
+    pub fn visit_nodes(&self) -> impl Iterator<Item = &TreeNode> {
+        NodeIter::new(&self.root.root)
     }
 }
 

@@ -191,21 +191,21 @@ impl TreeNode {
 
     /// Return an iterator over the children. Returns `None` if this node
     /// has no children (i.e. an `Action` node)
-    pub fn children(&self) -> Option<impl Iterator<Item = &TreeNode>> {
+    pub fn children(&self) -> Option<&[TreeNode]> {
         if self.data.children.is_empty() {
             None
         } else {
-            Some(self.data.children.iter())
+            Some(&self.data.children)
         }
     }
 
     /// Return a mutable iterator over the children. Returns `None` if this node
     /// has no children (i.e. an `Action` node)
-    pub fn children_mut(&mut self) -> Option<impl Iterator<Item = &mut TreeNode>> {
+    pub fn children_mut(&mut self) -> Option<&mut [TreeNode]> {
         if self.data.children.is_empty() {
             None
         } else {
-            Some(self.data.children.iter_mut())
+            Some(&mut self.data.children)
         }
     }
 }

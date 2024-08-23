@@ -127,10 +127,10 @@ pub mod sync {
 }
 
 pub mod prelude {
+    pub use crate::basic_types::{NodeStatus, PortsList};
+    pub use crate::blackboard::Blackboard;
+    pub use crate::derive::bt_node;
+    pub use crate::macros::*;
     pub use crate::nodes::NodeResult;
     pub use crate::tree::Factory;
-    pub use crate::blackboard::Blackboard;
-    pub use crate::basic_types::{NodeStatus, PortsList};
-    pub use crate::macros::*;
-    pub use crate::derive::bt_node;
 }

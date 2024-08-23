@@ -7,9 +7,7 @@ use behaviortree_rs_derive::{bt_node, BTToString, FromString};
 use log::info;
 
 #[derive(BTToString)]
-struct Test {
-    
-}
+struct Test {}
 
 impl ToString for Test {
     fn to_string(&self) -> String {

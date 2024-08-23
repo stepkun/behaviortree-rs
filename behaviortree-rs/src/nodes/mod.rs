@@ -28,7 +28,8 @@ type TickFn = for<'a> fn(
     &'a mut TreeNodeData,
     &'a mut Box<dyn Any + Send + Sync>,
 ) -> BoxFuture<'a, Result<NodeStatus, NodeError>>;
-type HaltFn = for<'a> fn(&'a mut TreeNodeData, &'a mut Box<dyn Any + Send + Sync>) -> BoxFuture<'a, ()>;
+type HaltFn =
+    for<'a> fn(&'a mut TreeNodeData, &'a mut Box<dyn Any + Send + Sync>) -> BoxFuture<'a, ()>;
 type PortsFn = fn() -> PortsList;
 
 #[derive(Clone, Copy, Debug)]

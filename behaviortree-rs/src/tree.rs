@@ -50,6 +50,8 @@ pub enum ParseError {
     NoMainTree,
     #[error("{0}")]
     ParseStringError(#[from] ParseBoolError),
+    #[error("Violated node type constraint: {0}")]
+    ViolateNodeConstraint(String),
 }
 
 type NodeCreateFnDyn = dyn Fn(NodeConfig, Vec<TreeNode>) -> TreeNode + Send + Sync;
@@ -63,6 +65,13 @@ enum TickOption {
 pub struct NodeIter<'a> {
     nodes: Vec<&'a TreeNode>,
     idxs: Vec<i32>,
+}
+
+#[derive(Debug)]
+enum CreateNodeResult {
+    Node(TreeNode),
+    Continue,
+    End,
 }
 
 #[derive(Debug)]
@@ -130,7 +139,7 @@ impl<'a> NodeIter<'a> {
 impl<'a> Iterator for NodeIter<'a> {
     type Item = &'a TreeNode;
 
-    fn next(&mut self) -> Option<Self::Item> {        
+    fn next(&mut self) -> Option<Self::Item> {
         // Loop until we find a node to return
         loop {
             // Out of nodes; we have traversed the entire tree
@@ -139,15 +148,17 @@ impl<'a> Iterator for NodeIter<'a> {
             }
 
             let end_idx = self.nodes.len() - 1;
-    
+
             let node = self.nodes[end_idx];
             let child_idx = &mut self.idxs[end_idx];
-    
+
             // When this index is -1, that means we haven't returned the node yet
             if *child_idx < 0 {
                 self.idxs[end_idx] = 0;
                 return Some(node);
-            } else if node.children().is_none() || *child_idx >= node.children().unwrap().len() as i32 {
+            } else if node.children().is_none()
+                || *child_idx >= node.children().unwrap().len() as i32
+            {
                 // When the node has no children, pop it off and try the next element
                 // OR
                 // If we've already returned all children, pop it off
@@ -272,12 +283,18 @@ impl Factory {
             }
         };
 
-        match self
-            .build_child(&mut reader, &blackboard, tree_name, path_prefix)
-            .await?
-        {
-            Some(child) => Ok(child),
-            None => Err(ParseError::NodeTypeMismatch("SubTree".to_string())),
+        // Loop until either a child or end tag is found
+        loop {
+            match self
+                .build_child(&mut reader, &blackboard, tree_name, path_prefix)
+                .await?
+            {
+                CreateNodeResult::Node(child) => break Ok(child),
+                CreateNodeResult::Continue => (),
+                CreateNodeResult::End => {
+                    break Err(ParseError::NodeTypeMismatch("SubTree".to_string()))
+                }
+            }
         }
     }
 
@@ -394,11 +411,17 @@ impl Factory {
     ) -> Result<Vec<TreeNode>, ParseError> {
         let mut nodes = Vec::new();
 
-        while let Some(node) = self
-            .build_child(reader, blackboard, tree_name, path_prefix)
-            .await?
-        {
-            nodes.push(node);
+        loop {
+            match self
+                .build_child(reader, blackboard, tree_name, path_prefix)
+                .await?
+            {
+                CreateNodeResult::Node(node) => {
+                    nodes.push(node);
+                }
+                CreateNodeResult::Continue => (),
+                CreateNodeResult::End => break,
+            }
         }
 
         Ok(nodes)
@@ -462,7 +485,7 @@ impl Factory {
         blackboard: &'a Blackboard,
         tree_name: &'a String,
         path_prefix: &'a String,
-    ) -> BoxFuture<Result<Option<TreeNode>, ParseError>> {
+    ) -> BoxFuture<Result<CreateNodeResult, ParseError>> {
         Box::pin(async move {
             let mut buf = Vec::new();
 
@@ -506,31 +529,61 @@ impl Factory {
                             node
                         }
                         NodeCategory::Decorator => {
-                            let child = match self
-                                .build_child(
-                                    reader,
-                                    blackboard,
-                                    tree_name,
-                                    &(config.path.to_owned() + "/"),
-                                )
-                                .await?
-                            {
-                                Some(node) => node,
-                                None => {
-                                    return Err(ParseError::NodeTypeMismatch(
-                                        "Decorator".to_string(),
-                                    ));
+                            // Make checkpoint to rewind to if necessary
+                            let checkpoint = reader.buffer_position();
+                            // Loop until either an end tag or the child is found
+                            let child = loop {
+                                match self
+                                    .build_child(
+                                        reader,
+                                        blackboard,
+                                        tree_name,
+                                        &(config.path.to_owned() + "/"),
+                                    )
+                                    .await?
+                                {
+                                    CreateNodeResult::Node(node) => break node,
+                                    CreateNodeResult::Continue => (),
+                                    CreateNodeResult::End => {
+                                        return Err(ParseError::NodeTypeMismatch(
+                                            "Decorator".to_string(),
+                                        ))
+                                    }
                                 }
                             };
+
+                            let mut buf = Vec::new();
+
+                            // Try to match the end tag to close the Decorator
+                            loop {
+                                match reader.read_event_into(&mut buf)? {
+                                    // Ignore comments
+                                    Event::Comment(_) => continue,
+                                    Event::End(tag) => {
+                                        // If a matching end tag is found, all good
+                                        if tag.name() == e.name() {
+                                            break;
+                                        } else {
+                                            // Otherwise, an error. Theoretically this should be unreachable since the XML parser should catch this error, but keeping it here just in case
+                                            return Err(ParseError::ViolateNodeConstraint(
+                                                format!(
+                                                    "Expected end tag for Decorator {node_name}"
+                                                ),
+                                            ));
+                                        }
+                                    }
+                                    _ => {
+                                        return Err(ParseError::ViolateNodeConstraint(format!(
+                                            "Decorator node [{node_name}] may only have one child"
+                                        )));
+                                    }
+                                }
+                            }
 
                             let mut node = self.create_node(node_fn, config, vec![child]);
 
                             self.add_ports_to_node(&mut node, &node_name, attributes)
                                 .await?;
-
-                            // Advance pointer one time to skip the end tag
-                            let mut buf = Vec::new();
-                            reader.read_event_into(&mut buf)?;
 
                             node
                         }
@@ -538,7 +591,7 @@ impl Factory {
                         x => return Err(ParseError::NodeTypeMismatch(format!("{x:?}"))),
                     };
 
-                    Some(node)
+                    CreateNodeResult::Node(node)
                 }
                 // Leaf Node
                 Event::Empty(e) => {
@@ -604,13 +657,13 @@ impl Factory {
                         _ => self.build_leaf_node(&node_name, attributes, config).await?,
                     };
 
-                    Some(node)
+                    CreateNodeResult::Node(node)
                 }
-                Event::End(_e) => None,
+                Event::End(_e) => CreateNodeResult::End,
                 Event::Comment(content) => {
                     debug!("Comment - \"{content:?}\"");
-                    None
-                },
+                    CreateNodeResult::Continue
+                }
                 e => {
                     debug!("Other - SHOULDN'T BE HERE");
                     debug!("{e:?}");
@@ -693,7 +746,57 @@ impl Factory {
                             return Err(ParseError::MissingAttribute("Found BehaviorTree definition without ID. Cannot continue parsing.".to_string()));
                         }
 
-                        reader.read_to_end_into(end_name, &mut buf)?;
+                        let mut buf = Vec::new();
+
+                        // Try to match the first node and skip past it
+                        loop {
+                            match reader.read_event_into(&mut buf)? {
+                                // Ignore comments
+                                Event::Comment(_) => continue,
+                                Event::End(tag) => {
+                                    // If a matching end tag is found, all good
+                                    if tag.name() == e.name() {
+                                        break;
+                                    } else {
+                                        // Otherwise, an error. Theoretically this should be unreachable since the XML parser should catch this error, but keeping it here just in case
+                                        return Err(ParseError::ViolateNodeConstraint(
+                                            String::from("Expected end tag for BehaviorTree"),
+                                        ));
+                                    }
+                                }
+                                Event::Start(e) => {
+                                    let mut buf = Vec::new();
+                                    reader.read_to_end_into(e.name(), &mut buf)?;
+                                    break;
+                                    // return Err(ParseError::ViolateNodeConstraint(String::from("BehaviorTree node may only have one child")));
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        // Try to match the end tag to close the BehaviorTree
+                        loop {
+                            match reader.read_event_into(&mut buf)? {
+                                // Ignore comments
+                                Event::Comment(_) => continue,
+                                Event::End(tag) => {
+                                    // If a matching end tag is found, all good
+                                    if tag.name() == e.name() {
+                                        break;
+                                    } else {
+                                        // Otherwise, an error. Theoretically this should be unreachable since the XML parser should catch this error, but keeping it here just in case
+                                        return Err(ParseError::ViolateNodeConstraint(
+                                            String::from("Expected end tag for BehaviorTree"),
+                                        ));
+                                    }
+                                }
+                                _ => {
+                                    return Err(ParseError::ViolateNodeConstraint(String::from(
+                                        "BehaviorTree node may only have one child",
+                                    )));
+                                }
+                            }
+                        }
                     }
                 }
                 Event::End(e) => {
@@ -706,9 +809,9 @@ impl Factory {
                 }
                 Event::Comment(_) => (),
                 x => {
-                    return Err(ParseError::InternalError(
-                        format!("Something bad has happened. Please report this. {x:?}")
-                    ))
+                    return Err(ParseError::InternalError(format!(
+                        "Something bad has happened. Please report this. {x:?}"
+                    )))
                 }
             };
         }

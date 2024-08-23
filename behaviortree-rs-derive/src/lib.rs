@@ -4,7 +4,12 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span};
 use quote::ToTokens;
 use syn::{
-    parse::Parse, punctuated::Punctuated, token::Comma, visit_mut::{self, VisitMut}, AttrStyle, DeriveInput, FnArg, GenericParam, ImplItem, ImplItemFn, ItemImpl, ItemStruct, LitStr, Path, ReturnType, Type
+    parse::Parse,
+    punctuated::Punctuated,
+    token::Comma,
+    visit_mut::{self, VisitMut},
+    AttrStyle, DeriveInput, FnArg, GenericParam, ImplItem, ImplItemFn, ItemImpl, ItemStruct,
+    LitStr, Path, ReturnType, Type,
 };
 
 #[macro_use]
@@ -139,9 +144,7 @@ impl Parse for NodeAttribute {
         input.parse::<Token![=]>()?;
         let value = input.parse()?;
 
-        Ok(Self {
-            name, value
-        })
+        Ok(Self { name, value })
     }
 }
 
@@ -159,37 +162,41 @@ impl Parse for NodeImplConfig {
         let node_type_str = node_type.to_string();
 
         if input.parse::<Token![,]>().is_ok() {
-            let mut attributes: HashMap<String, NodeAttribute> = input.parse_terminated(NodeAttribute::parse, Token![,])?
+            let mut attributes: HashMap<String, NodeAttribute> = input
+                .parse_terminated(NodeAttribute::parse, Token![,])?
                 .into_iter()
                 .map(|val| (val.name.to_string(), val))
-                .collect();    
-    
+                .collect();
+
             let (tick_fn, on_start_fn) = if node_type_str == "StatefulActionNode" {
                 let tick_fn = attributes
                     .remove("on_running")
                     .map(|val| val.value)
                     .unwrap_or_else(|| syn::parse2(quote! { on_running }).unwrap());
-                
+
                 let on_start_fn = attributes
                     .remove("on_start")
                     .map(|val| val.value)
                     .unwrap_or_else(|| syn::parse2(quote! { on_start }).unwrap());
-    
+
                 (tick_fn, Some(on_start_fn))
             } else {
                 let tick_fn = attributes
                     .remove("tick")
                     .map(|val| val.value)
                     .unwrap_or_else(|| syn::parse2(quote! { tick }).unwrap());
-    
+
                 (tick_fn, None)
             };
-    
+
             let ports = attributes.remove("ports").map(|val| val.value);
             let halt = attributes.remove("halt").map(|val| val.value);
-    
+
             if let Some((_, invalid_field)) = attributes.into_iter().next() {
-                return Err(syn::Error::new(invalid_field.name.span(), "invalid field name"));
+                return Err(syn::Error::new(
+                    invalid_field.name.span(),
+                    "invalid field name",
+                ));
             }
 
             Ok(Self {
@@ -201,7 +208,10 @@ impl Parse for NodeImplConfig {
             })
         } else {
             let (tick_fn, on_start_fn) = if node_type_str == "StatefulActionNode" {
-                (Ident::new("on_running", input.span()), Some(Ident::new("on_start", input.span())))
+                (
+                    Ident::new("on_running", input.span()),
+                    Some(Ident::new("on_start", input.span())),
+                )
             } else {
                 (Ident::new("tick", input.span()), None)
             };
@@ -224,7 +234,7 @@ impl VisitMut for SelfVisitor {
         if i == "self" {
             let ctx = quote! { self_ };
             let ctx = syn::parse2(ctx).unwrap();
-            
+
             *i = ctx;
         }
 
@@ -238,7 +248,7 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, is_async: bool) -
         fn_item.sig.asyncness = None;
     }
     // Add lifetime to signature
-    let lifetime: GenericParam = syn::parse2(quote!{ 'a })?;
+    let lifetime: GenericParam = syn::parse2(quote! { 'a })?;
     fn_item.sig.generics.params.push(lifetime);
     // Rename parameters
     for arg in fn_item.sig.inputs.iter_mut() {
@@ -249,7 +259,9 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, is_async: bool) -
         }
     }
 
-    let new_arg = syn::parse2(quote! { ctx: &'a mut ::std::boxed::Box<dyn ::core::any::Any + ::core::marker::Send + ::core::marker::Sync> })?;
+    let new_arg = syn::parse2(
+        quote! { ctx: &'a mut ::std::boxed::Box<dyn ::core::any::Any + ::core::marker::Send + ::core::marker::Sync> },
+    )?;
 
     fn_item.sig.inputs.push(new_arg);
 
@@ -261,7 +273,7 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, is_async: bool) -
         // Get old return without the -> token
         let old_return = match &fn_item.sig.output {
             ReturnType::Default => quote! { () },
-            ReturnType::Type(_, ret) => quote! { #ret }
+            ReturnType::Type(_, ret) => quote! { #ret },
         };
 
         // Wrap return type in BoxFuture
@@ -271,7 +283,7 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, is_async: bool) -
 
         let new_return = syn::parse2(new_return)?;
         fn_item.sig.output = new_return;
-    
+
         // Wrap function block in Box::pin and create ctx
         quote! {
             {
@@ -298,12 +310,9 @@ fn alter_node_fn(fn_item: &mut ImplItemFn, struct_type: &Type, is_async: bool) -
     Ok(())
 }
 
-fn bt_impl(
-    mut args: NodeImplConfig,
-    mut item: ItemImpl,
-) -> syn::Result<proc_macro2::TokenStream> {
+fn bt_impl(mut args: NodeImplConfig, mut item: ItemImpl) -> syn::Result<proc_macro2::TokenStream> {
     let struct_type = &item.self_ty;
-    
+
     for sub_item in item.items.iter_mut() {
         if let ImplItem::Fn(fn_item) = sub_item {
             let mut should_rewrite_def = false;
@@ -351,7 +360,7 @@ fn bt_impl(
                 if should_rewrite_def {
                     alter_node_fn(fn_item, struct_type, true)?;
                 }
-                
+
                 fn_item.sig.ident = new_ident;
             }
         }
@@ -376,12 +385,8 @@ fn bt_impl(
     Ok(quote! { #item })
 }
 
-fn bt_struct(
-    type_ident: Path,
-    mut item: ItemStruct,
-) -> syn::Result<proc_macro2::TokenStream> {
-    let mut derives =
-        vec![quote! { ::std::fmt::Debug }];
+fn bt_struct(type_ident: Path, mut item: ItemStruct) -> syn::Result<proc_macro2::TokenStream> {
+    let mut derives = vec![quote! { ::std::fmt::Debug }];
 
     let type_ident = type_ident.require_ident()?;
     let type_ident_str = type_ident.to_string();
@@ -514,7 +519,7 @@ fn bt_struct(
         "StatefulActionNode" | "SyncActionNode" => syn::parse2::<Path>(quote! { Action })?,
         "ControlNode" => syn::parse2::<Path>(quote! { Control })?,
         "DecoratorNode" => syn::parse2::<Path>(quote! { Decorator })?,
-        _ => return Err(syn::Error::new_spanned(type_ident, "Invalid node type"))
+        _ => return Err(syn::Error::new_spanned(type_ident, "Invalid node type")),
     };
 
     let node_type = match type_ident_str.as_str() {
@@ -522,7 +527,7 @@ fn bt_struct(
         "SyncActionNode" => syn::parse2::<Path>(quote! { SyncAction })?,
         "ControlNode" => syn::parse2::<Path>(quote! { Control })?,
         "DecoratorNode" => syn::parse2::<Path>(quote! { Decorator })?,
-        _ => return Err(syn::Error::new_spanned(type_ident, "Invalid node type"))
+        _ => return Err(syn::Error::new_spanned(type_ident, "Invalid node type")),
     };
 
     let node_specific_tokens = node_fields(&type_ident_str);
@@ -550,7 +555,7 @@ fn bt_struct(
                     children: ::std::vec::Vec::new(),
                     ports_fn: Self::_ports,
                 };
-                
+
                 ::behaviortree_rs::nodes::TreeNode {
                     data: node_data,
                     context: ::std::boxed::Box::new(ctx),
@@ -702,12 +707,21 @@ pub fn bt_node(args: TokenStream, input: TokenStream) -> TokenStream {
     if let Ok(struct_) = syn::parse::<ItemStruct>(input.clone()) {
         let args = parse_macro_input!(args as Path);
         // let args = parse_macro_input!(args as NodeStructConfig);
-        bt_struct(args, struct_).unwrap_or_else(syn::Error::into_compile_error).into()
+        bt_struct(args, struct_)
+            .unwrap_or_else(syn::Error::into_compile_error)
+            .into()
     } else if let Ok(impl_) = syn::parse::<ItemImpl>(input) {
         let args = parse_macro_input!(args as NodeImplConfig);
-        bt_impl(args, impl_).unwrap_or_else(syn::Error::into_compile_error).into()
+        bt_impl(args, impl_)
+            .unwrap_or_else(syn::Error::into_compile_error)
+            .into()
     } else {
-        syn::Error::new(Span::call_site(), "The `bt_node` macro must be used on either a `struct` or `impl` block.").into_compile_error().into()
+        syn::Error::new(
+            Span::call_site(),
+            "The `bt_node` macro must be used on either a `struct` or `impl` block.",
+        )
+        .into_compile_error()
+        .into()
     }
 
     // let args_parsed = parse_macro_input!(args as NodeStructConfig);
@@ -765,16 +779,16 @@ impl Parse for NodeRegistration {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let factory = input.parse()?;
         input.parse::<Token![,]>()?;
-        
+
         let node_name = input.parse::<syn::Expr>()?.to_token_stream();
-        
+
         input.parse::<Token![,]>()?;
         let node_type = input.parse()?;
         // If there are extra parameters, try to parse a comma. Otherwise skip
         if !input.is_empty() {
             input.parse::<Token![,]>()?;
         }
-    
+
         let params = input.parse_terminated(syn::Expr::parse, Token![,])?;
 
         Ok(Self {
@@ -791,14 +805,13 @@ fn build_node(node: &NodeRegistration) -> proc_macro2::TokenStream {
         factory: _,
         name,
         node_type,
-        params
+        params,
     } = node;
 
-    let cloned_names = (0..params.len())
-        .fold(quote!{}, |acc, i| {
-            let arg_name = Ident::new(&format!("arg{i}"), Span::call_site());
-            quote!{ #acc, #arg_name.clone() }
-        });
+    let cloned_names = (0..params.len()).fold(quote! {}, |acc, i| {
+        let arg_name = Ident::new(&format!("arg{i}"), Span::call_site());
+        quote! { #acc, #arg_name.clone() }
+    });
 
     quote! {
         {
@@ -815,7 +828,11 @@ fn build_node(node: &NodeRegistration) -> proc_macro2::TokenStream {
     }
 }
 
-fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, node_type: NodeTypeInternal) -> TokenStream {
+fn register_node(
+    input: TokenStream,
+    node_type_token: proc_macro2::TokenStream,
+    node_type: NodeTypeInternal,
+) -> TokenStream {
     let node_registration = parse_macro_input!(input as NodeRegistration);
 
     let factory = &node_registration.factory;
@@ -823,16 +840,13 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
     let params = &node_registration.params;
 
     // Create expression that clones all parameters
-    let param_clone_expr = params
-        .iter()
-        .enumerate()
-        .fold(quote!{}, |acc, (i, item)| {
-            let arg_name = Ident::new(&format!("arg{i}"), Span::call_site());
-            quote! {
-                #acc
-                let #arg_name = #item.clone();
-            }
-        });
+    let param_clone_expr = params.iter().enumerate().fold(quote! {}, |acc, (i, item)| {
+        let arg_name = Ident::new(&format!("arg{i}"), Span::call_site());
+        quote! {
+            #acc
+            let #arg_name = #item.clone();
+        }
+    });
 
     let node = build_node(&node_registration);
 
@@ -840,10 +854,10 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
         NodeTypeInternal::Control => quote! {
             node.data.children = children;
         },
-        NodeTypeInternal::Decorator => quote! { 
+        NodeTypeInternal::Decorator => quote! {
             node.data.children = children;
         },
-        _ => quote!{ }
+        _ => quote! {},
     };
 
     let expanded = quote! {
@@ -858,7 +872,7 @@ fn register_node(input: TokenStream, node_type_token: proc_macro2::TokenStream, 
             | -> ::behaviortree_rs::nodes::TreeNode
             {
                 let mut node = #node;
-                
+
                 #extra_steps
 
                 node
@@ -878,64 +892,76 @@ enum NodeTypeInternal {
 }
 
 /// Registers an Action type node with the factory.
-/// 
+///
 /// **NOTE:** During tree creation, a new node is created using the parameters
 /// given after the node type field. You specified these fields in your node struct
 /// definition. Each time a node is created, the parameters are cloned using `Clone::clone`.
 /// Thus, your parameters must implement `Clone`.
-/// 
+///
 /// # Usage
-/// 
+///
 /// ```ignore
 /// let mut factory = Factory::new();
 /// let arg1 = String::from("hello world");
 /// let arg2 = 10u32;
-/// 
+///
 /// register_action_node!(factory, "TestNode", TestNode, arg1, arg2);
 /// ```
 #[proc_macro]
 pub fn register_action_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeCategory::Action }, NodeTypeInternal::Action)
+    register_node(
+        input,
+        quote! { ::behaviortree_rs::basic_types::NodeCategory::Action },
+        NodeTypeInternal::Action,
+    )
 }
 
 /// Registers an Control type node with the factory.
-/// 
+///
 /// **NOTE:** During tree creation, a new node is created using the parameters
 /// given after the node type field. You specified these fields in your node struct
 /// definition. Each time a node is created, the parameters are cloned using `Clone::clone`.
 /// Thus, your parameters must implement `Clone`.
-/// 
+///
 /// # Usage
-/// 
+///
 /// ```ignore
 /// let mut factory = Factory::new();
 /// let arg1 = String::from("hello world");
 /// let arg2 = 10u32;
-/// 
+///
 /// register_control_node!(factory, "TestNode", TestNode, arg1, arg2);
 /// ```
 #[proc_macro]
 pub fn register_control_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeCategory::Control }, NodeTypeInternal::Control)
+    register_node(
+        input,
+        quote! { ::behaviortree_rs::basic_types::NodeCategory::Control },
+        NodeTypeInternal::Control,
+    )
 }
 
 /// Registers an Decorator type node with the factory.
-/// 
+///
 /// **NOTE:** During tree creation, a new node is created using the parameters
 /// given after the node type field. You specified these fields in your node struct
 /// definition. Each time a node is created, the parameters are cloned using `Clone::clone`.
 /// Thus, your parameters must implement `Clone`.
-/// 
+///
 /// # Usage
-/// 
+///
 /// ```ignore
 /// let mut factory = Factory::new();
 /// let arg1 = String::from("hello world");
 /// let arg2 = 10u32;
-/// 
+///
 /// register_decorator_node!(factory, "TestNode", TestNode, arg1, arg2);
 /// ```
 #[proc_macro]
 pub fn register_decorator_node(input: TokenStream) -> TokenStream {
-    register_node(input, quote! { ::behaviortree_rs::basic_types::NodeCategory::Decorator }, NodeTypeInternal::Decorator)
+    register_node(
+        input,
+        quote! { ::behaviortree_rs::basic_types::NodeCategory::Decorator },
+        NodeTypeInternal::Decorator,
+    )
 }

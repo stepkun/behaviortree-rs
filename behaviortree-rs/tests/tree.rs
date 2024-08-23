@@ -30,12 +30,16 @@ fn visitor() {
     assert!(tree.is_ok());
     let tree = tree.unwrap();
 
-    let nodes: Vec<&str> = tree
-        .visit_nodes()
-        .map(|node| {
-            node.name()
-        })
-        .collect();
+    let nodes: Vec<&str> = tree.visit_nodes().map(|node| node.name()).collect();
 
-    assert_eq!(nodes, vec!["Sequence", "Sequence", "Inverter", "StatusNode", "StatusNode"]);
+    assert_eq!(
+        nodes,
+        vec![
+            "Sequence",
+            "Sequence",
+            "Inverter",
+            "StatusNode",
+            "StatusNode"
+        ]
+    );
 }

@@ -1,8 +1,4 @@
-use std::{
-    any::Any,
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{any::Any, collections::HashMap, sync::Arc};
 
 use parking_lot::{Mutex, RwLock};
 
@@ -102,10 +98,7 @@ pub struct BlackboardData {
 /// Supertrait for `Any + BTToString`
 pub trait AnyStringy: Any + BTToString + Send {}
 
-impl<T> AnyStringy for T
-where
-    T: Any + BTToString + Send
-{}
+impl<T> AnyStringy for T where T: Any + BTToString + Send {}
 
 impl std::fmt::Debug for (dyn AnyStringy) {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -225,24 +218,22 @@ impl Blackboard {
     where
         T: Any + Clone,
     {
-        self
-            .get_entry(key)
-            .and_then(|entry| {
-                let entry = entry.lock();
-                
-                match &*entry {
-                    Entry::Generic(entry) => {
-                        // Try to downcast directly to T
-                        entry.downcast_ref::<T>().cloned()
-                    }
-                    // Because `Stringy` is a superset of `Generic`, we can return a `Stringy`
-                    // entry from this
-                    Entry::Stringy(entry) => {
-                        // Try to downcast directly to T
-                        <dyn Any>::downcast_ref::<T>(entry).cloned()
-                    }
+        self.get_entry(key).and_then(|entry| {
+            let entry = entry.lock();
+
+            match &*entry {
+                Entry::Generic(entry) => {
+                    // Try to downcast directly to T
+                    entry.downcast_ref::<T>().cloned()
                 }
-            })
+                // Because `Stringy` is a superset of `Generic`, we can return a `Stringy`
+                // entry from this
+                Entry::Stringy(entry) => {
+                    // Try to downcast directly to T
+                    <dyn Any>::downcast_ref::<T>(entry).cloned()
+                }
+            }
+        })
     }
 
     /// `stringy` version of `__get_no_string`
@@ -251,45 +242,37 @@ impl Blackboard {
         T: AnyStringy + Clone,
     {
         // Try to get the key
-        self
-            .get_entry(key)
-            .and_then(|entry| {
-                let entry = entry.lock();
-    
-                match &*entry {
-                    Entry::Stringy(entry) => {
-                        // Try to downcast directly to T
-                        <dyn Any>::downcast_ref::<T>(entry).cloned()
-                    }
-                    // If it's not `Stringy`, we can't do anything even if the value exists as `Generic`,
-                    // so return None
-                    _ => None
+        self.get_entry(key).and_then(|entry| {
+            let entry = entry.lock();
+
+            match &*entry {
+                Entry::Stringy(entry) => {
+                    // Try to downcast directly to T
+                    <dyn Any>::downcast_ref::<T>(entry).cloned()
                 }
-            })
+                // If it's not `Stringy`, we can't do anything even if the value exists as `Generic`,
+                // so return None
+                _ => None,
+            }
+        })
     }
 
     /// Internal method that tries to get the value at key as a
     /// `String` or `&str`, returning an owned type
     fn __get_string(&mut self, key: &str) -> Option<String> {
-        self
-            .get_entry(key)
-            .and_then(|entry| {
-                let entry_lock = entry.lock();
-                // If value is a String or &str, try to call `FromString` to convert to T
-                match &(*entry_lock) {
-                    Entry::Generic(entry) => {
-                        entry
-                            .downcast_ref::<String>()
-                            .map(ToString::to_string)
-                            .or_else(|| entry.downcast_ref::<&str>().map(ToString::to_string))
-                    }
-                    Entry::Stringy(entry) => {
-                        <dyn Any>::downcast_ref::<String>(entry)
-                            .map(ToString::to_string)
-                            .or_else(|| <dyn Any>::downcast_ref::<String>(entry).cloned())
-                    }
-                }
-            })
+        self.get_entry(key).and_then(|entry| {
+            let entry_lock = entry.lock();
+            // If value is a String or &str, try to call `FromString` to convert to T
+            match &(*entry_lock) {
+                Entry::Generic(entry) => entry
+                    .downcast_ref::<String>()
+                    .map(ToString::to_string)
+                    .or_else(|| entry.downcast_ref::<&str>().map(ToString::to_string)),
+                Entry::Stringy(entry) => <dyn Any>::downcast_ref::<String>(entry)
+                    .map(ToString::to_string)
+                    .or_else(|| <dyn Any>::downcast_ref::<String>(entry).cloned()),
+            }
+        })
     }
 
     /// Internal method that tries to get the value at key, but only works
@@ -394,9 +377,9 @@ impl Blackboard {
 
     /// Equivalent of `get()` but is `stringy`. This method returns `None` for
     /// any values set using `set()` instead of `set_stringy()`.
-    /// 
+    ///
     /// **NOTE**:
-    /// 
+    ///
     /// You can use this method to retrieve types stored using `set::<String>()`
     /// or `set_stringy::<String>()`. However, note that once a type is
     /// successfully parsed into `T`, the inner value gets replaced by the parsed
@@ -420,20 +403,16 @@ impl Blackboard {
     /// Tries to get the value at the provided key, returned as a `String`. This
     /// method will only work for values originally added via `set_stringy()`, which
     /// has a trait bound of `BTToString`, and is used by this function to turn it into
-    /// a 
+    /// a
     pub fn get_as_string(&mut self, key: impl AsRef<str>) -> Option<String> {
-        self
-            .get_entry(key.as_ref())
-            .and_then(|entry| {
-                let entry = entry.lock();
+        self.get_entry(key.as_ref()).and_then(|entry| {
+            let entry = entry.lock();
 
-                match &*entry {
-                    Entry::Stringy(entry) => {
-                        Some(entry.bt_to_string())
-                    }
-                    Entry::Generic(_) => None,
-                }
-            })
+            match &*entry {
+                Entry::Stringy(entry) => Some(entry.bt_to_string()),
+                Entry::Generic(_) => None,
+            }
+        })
     }
 
     /// Version of `get<T>` that does _not_ try to convert from string if the type
@@ -504,9 +483,9 @@ impl Blackboard {
     }
 
     /// `stringy` version of `set()`
-    /// 
+    ///
     /// **NOTE**:
-    /// 
+    ///
     /// See the note on `get_stringy()` for information to remember when using
     /// `set()`/`get()` vs `set_stringy()`/`get_stringy()`.
     pub fn set_stringy<T: AnyStringy + Send + 'static>(&mut self, key: impl AsRef<str>, value: T) {

@@ -77,17 +77,34 @@ pub use __define_ports as define_ports;
 #[macro_export]
 #[doc(hidden)]
 macro_rules! __input_port {
-    ($n:tt) => {{
+    ($n:literal) => {{
         use $crate::basic_types::{PortDirection, PortInfo};
         let port_info = PortInfo::new(PortDirection::Input);
 
         ($n, port_info)
     }};
-    ($n:tt, $d:expr) => {{
+    ($n:literal, expr) => {{
+        use $crate::basic_types::{PortDirection, PortInfo};
+        let mut port_info = PortInfo::new(PortDirection::Input);
+
+        port_info.set_expr(true);
+
+        ($n, port_info)
+    }};
+    ($n:literal, $d:expr) => {{
         use $crate::basic_types::{PortDirection, PortInfo};
         let mut port_info = PortInfo::new(PortDirection::Input);
 
         port_info.set_default($d);
+
+        ($n, port_info)
+    }};
+    ($n:literal, $d:expr, expr) => {{
+        use $crate::basic_types::{PortDirection, PortInfo};
+        let mut port_info = PortInfo::new(PortDirection::Input);
+
+        port_info.set_default($d);
+        port_info.set_expr(true);
 
         ($n, port_info)
     }};

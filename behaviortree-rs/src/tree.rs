@@ -1,5 +1,6 @@
 use std::{collections::HashMap, io::Cursor, string::FromUtf8Error, sync::Arc};
 
+use evalexpr::{DefaultNumericTypes, EvalexprError};
 use futures::future::BoxFuture;
 use log::{debug, info};
 use quick_xml::{
@@ -52,6 +53,15 @@ pub enum ParseError {
     ParseStringError(#[from] ParseBoolError),
     #[error("Violated node type constraint: {0}")]
     ViolateNodeConstraint(String),
+    #[error("Error parsing expression in port value: {0}")]
+    InvalidPortExpression(#[from] EvalexprError<DefaultNumericTypes>),
+    #[error("Variable in blackboard pointer \"{0}\" is missing a type.")]
+    PortExpressionMissingType(String),
+    #[error("Invalid type \"{type_name}\" for variable \"{ident}\". Valid types are: int, float, str, bool")]
+    PortExpressionInvalidType {
+        ident: String,
+        type_name: String,
+    },
 }
 
 type NodeCreateFnDyn = dyn Fn(NodeConfig, Vec<TreeNode>) -> TreeNode + Send + Sync;
@@ -456,6 +466,28 @@ impl Factory {
         // Add ports to NodeConfig
         for (remap_name, remap_val) in remap {
             if let Some(port) = manifest.ports.get(&remap_name) {
+                // Validate that any expr-enabled ports contain valid expressions,
+                // and the provided types for blackboard pointers are one of the valid ones
+                if port.parse_expr() {
+                    let expr = evalexpr::build_operator_tree::<evalexpr::DefaultNumericTypes>(&remap_val)?;
+
+                    for key in expr.iter_variable_identifiers() {
+                        // Check if it's a blackboard pointer
+                        if key.starts_with('{') && key.ends_with('}') {
+                            // Remove the brackets
+                            let inner_key = &key[1..(key.len()-1)];
+                            // Split the type from the name
+                            let (name, var_type) = inner_key.split_once(':').ok_or_else(|| ::behaviortree_rs::tree::ParseError::PortExpressionMissingType(inner_key.to_owned()))?;
+            
+                            // Check if the type is supported
+                            match var_type {
+                                "int" | "float" | "str" | "bool" => (),
+                                _ => return Err(::behaviortree_rs::tree::ParseError::PortExpressionInvalidType { ident: name.to_owned(), type_name: var_type.to_owned() }),
+                            };
+                        }
+                    }
+                }
+                
                 config.add_port(port.direction().clone(), remap_name, remap_val);
             }
         }
@@ -768,8 +800,8 @@ impl Factory {
                                     let mut buf = Vec::new();
                                     reader.read_to_end_into(e.name(), &mut buf)?;
                                     break;
-                                    // return Err(ParseError::ViolateNodeConstraint(String::from("BehaviorTree node may only have one child")));
                                 }
+                                Event::Empty(_) => break,
                                 _ => continue,
                             }
                         }
@@ -932,6 +964,19 @@ fn builtin_nodes() -> HashMap<String, (NodeCategory, Arc<NodeCreateFnDyn>)> {
     node_map.insert(String::from("WhileDoElse"), (NodeCategory::Control, node));
 
     // Decorator nodes
+    // Condition node
+    let node = Arc::new(
+        move |config: NodeConfig, _children: Vec<TreeNode>| -> TreeNode {
+            let node =
+                build_node_ptr!(config, "Condition", nodes::action::ConditionNode);
+            node
+        },
+    );
+    node_map.insert(
+        String::from("Condition"),
+        (NodeCategory::Action, node),
+    );
+
     let node = Arc::new(
         move |config: NodeConfig, mut children: Vec<TreeNode>| -> TreeNode {
             let mut node =

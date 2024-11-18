@@ -334,3 +334,50 @@ fn async_test() {
         assert!(res.is_ok());
     });
 }
+
+#[test]
+fn condition() {
+    nodes::test_setup();
+
+    // Check case where there is more than one tree, and the ID is specified (Ok)
+    let xml = r#"
+        <root main_tree_to_execute="main">
+            <BehaviorTree ID="main">
+                <Fallback>
+                    <Condition expr="{count:int} < 5" />
+                    <StatusNode status="Failure" />
+                </Fallback>
+            </BehaviorTree>
+        </root>
+    "#
+    .to_string();
+
+    let mut factory = Factory::new();
+    register_action_node!(factory, "StatusNode", StatusNode);
+    let mut blackboard = Blackboard::create();
+
+    let tree = factory.create_sync_tree_from_text(xml, &blackboard);
+
+    assert!(tree.is_ok());
+
+    let mut tree = tree.unwrap();
+
+    blackboard.set("count", 6i64);
+
+    let res = tree.tick_once();
+    if res.is_err() {
+        log::error!("{res:?}");
+    }
+    assert!(res.is_ok());
+    let res = res.unwrap();
+
+    assert_eq!(res, NodeStatus::Failure);
+
+    blackboard.set("count", 2i64);
+
+    let res = tree.tick_once();
+    assert!(res.is_ok());
+    let res = res.unwrap();
+
+    assert_eq!(res, NodeStatus::Success);
+}

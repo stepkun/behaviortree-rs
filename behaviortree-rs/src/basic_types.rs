@@ -387,6 +387,9 @@ pub struct PortInfo {
     r#type: PortDirection,
     description: String,
     default_value: Option<String>,
+    /// When `true`, should parse the port value as an expression when loading
+    /// the tree to validate syntax.
+    parse_expr: bool,
 }
 
 impl PortInfo {
@@ -395,6 +398,7 @@ impl PortInfo {
             r#type: direction,
             description: String::new(),
             default_value: None,
+            parse_expr: false,
         }
     }
 
@@ -415,6 +419,14 @@ impl PortInfo {
 
     pub fn set_description(&mut self, description: String) {
         self.description = description
+    }
+
+    pub fn set_expr(&mut self, parse_expr: bool) {
+        self.parse_expr = parse_expr;
+    }
+
+    pub fn parse_expr(&self) -> bool {
+        self.parse_expr
     }
 
     pub fn direction(&self) -> &PortDirection {

@@ -310,6 +310,8 @@ pub enum NodeError {
     LockPoisoned,
     #[error("A tick method was called that should have been unreachable. Please report this.")]
     UnreachableTick,
+    #[error("Error evaluating a Condition expression: {0}")]
+    ConditionExpressionError(String),
 }
 
 /// TODO: Not currently used

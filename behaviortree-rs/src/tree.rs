@@ -748,7 +748,7 @@ impl Factory {
 
         // Register each BehaviorTree in the XML
         loop {
-            let event = { reader.read_event_into(&mut buf)? };
+            let event = reader.read_event_into(&mut buf)?;
 
             match event {
                 Event::Start(e) => {

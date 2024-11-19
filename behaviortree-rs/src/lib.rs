@@ -104,6 +104,7 @@ extern crate self as behaviortree_rs;
 
 pub mod basic_types;
 pub mod blackboard;
+pub mod value;
 
 pub mod nodes;
 

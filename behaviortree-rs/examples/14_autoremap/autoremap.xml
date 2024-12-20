@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4"
+      main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <Script code="target:=&apos;1;2;3&apos;"/>
+      <SubTree ID="MoveRobot"
+               _autoremap="true"
+               frame="world"/>
+      <SaySomething msg="{result}"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="MoveRobot">
+    <Fallback>
+      <Sequence>
+        <MoveBase goal="{target}"/>
+        <Script code="result:=&apos;goal_reached&apos;"/>
+      </Sequence>
+      <ForceFailure>
+        <Script code="result:=&apos;error&apos;"/>
+      </ForceFailure>
+    </Fallback>
+  </BehaviorTree>
+
+  <!-- Description of Node Models (used by Groot) -->
+  <TreeNodesModel>
+    <Action ID="MoveBase"
+            editable="true">
+      <input_port name="goal"/>
+    </Action>
+    <Action ID="SaySomething"
+            editable="true">
+      <input_port name="msg"/>
+    </Action>
+  </TreeNodesModel>
+
+</root>

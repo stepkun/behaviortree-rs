@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root BTCPP_format="4">
+  <BehaviorTree ID="MainTree">
+    <Sequence>
+      <SaySomething message="Hello."/>
+      <ThinkWhatToSay text="{the_answer}"/>
+      <SaySomething message="{the_answer}"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Description of Node Models (used by Groot) -->
+  <TreeNodesModel>
+    <Action ID="SaySomething"
+            editable="true">
+      <input_port name="message"
+                  default="Hello"/>
+    </Action>
+    <Action ID="ThinkWhatToSay"
+            editable="true">
+      <output_port name="text"
+                   default="Nothing to say"/>
+    </Action>
+  </TreeNodesModel>
+
+</root>

@@ -1,7 +1,7 @@
 // Copyright © 2024 Stephan Kunz
 
-//! This example implements the fourteenth tutorial from https://www.behaviortree.dev
-//! see https://www.behaviortree.dev/docs/tutorial-advanced/tutorial_14_subtree_model
+//! This example implements the sixth tutorial from https://www.behaviortree.dev
+//! see https://www.behaviortree.dev/docs/tutorial-basics/tutorial_06_subtree_ports
 //!
 //! Differences to BehaviorTree.CPP
 //! - there is no Script node available, that has to be implemented by user
